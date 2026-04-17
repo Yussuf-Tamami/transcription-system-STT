@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Transcription - H-TECH</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; display: flex; flex-direction: column; align-items: center; padding-top: 100px; }
+        nav { background: #333; width: 100%; padding: 15px; text-align: center; position: fixed; top: 0; }
+        nav a { color: white; margin: 0 20px; text-decoration: none; font-weight: bold; }
+        .live-box { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 600px; text-align: center; }
+        #liveDisplay { width: 100%; height: 250px; border: 1px solid #ddd; margin-top: 20px; padding: 15px; overflow-y: auto; text-align: left; background: #fafafa; border-radius: 8px; font-size: 1.1rem; line-height: 1.6; }
+        .controls { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
+        .btn { padding: 10px 25px; border-radius: 5px; cursor: pointer; border: none; font-weight: bold; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">← BACK HOME</a>
+        <a href="/history">HISTORY</a>
+    </nav>
+
+    <div class="live-box">
+        <h2>🎤 Live Streaming</h2>
+        <p id="liveStatus" style="color: #666;">Status: Ready to listen</p>
+        
+        <div id="liveDisplay">Waiting for audio...</div>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startLive()" class="btn btn-success">Start Recording</button>
+            <button id="stopBtn" onclick="stopLive()" class="btn btn-danger" disabled>Stop Recording</button>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let mediaRecorder;
+        let finalDisplay = ""; 
+
+        async function startLive() {
+            const liveDisplay = document.getElementById('liveDisplay');
+            const liveStatus = document.getElementById('liveStatus');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                socket = new WebSocket(`ws://${window.location.host}/ws/live`);
+                
+                socket.onopen = () => {
+                    liveDisplay.innerText = "Listening...";
+                    liveStatus.innerText = "🔴 Recording...";
+                    liveStatus.style.color = "red";
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                            socket.send(event.data);
+                        }
+                    };
+                    mediaRecorder.start(1000); 
+                };
+
+                socket.onmessage = (event) => {
+    try {
+        const data = JSON.parse(event.data);
+        console.log("WebSocket Received:", data); // Check your Browser Console (F12)
+
+        const liveDisplay = document.getElementById('liveDisplay');
+
+        // Robust handling of different Vosk output formats
+        if (data.status === "partial" || data.partial) {
+            let text = data.text || data.partial || "";
+            liveDisplay.innerHTML = `${finalDisplay} <span style="color: #888;">${text}</span>`;
+        } 
+        else if (data.status === "final_chunk" || data.text) {
+            let text = data.text || "";
+            if (text.trim().length > 0) {
+                finalDisplay += text + ". ";
+                liveDisplay.innerHTML = `<strong>${finalDisplay}</strong>`;
+            }
+        } 
+        else if (data.status === "complete") {
+            liveStatus.innerText = "✅ Done!";
+            liveDisplay.innerHTML = `<strong>Final Transcript:</strong> ${data.text}`;
+            // Optional: Automatically refresh history if the function exists
+            if (typeof loadHistory === "function") loadHistory(); 
+        }
+    } catch (e) {
+        console.error("Error parsing WebSocket message:", e);
+    }
+};
+
+                socket.onerror = (error) => {
+                    alert("WebSocket Error: Make sure the server is running.");
+                };
+
+            } catch (err) {
+                alert("Could not access microphone.");
+            }
+        }
+
+        function stopLive() {
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+            }
+            setTimeout(() => {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send("END_OF_STREAM"); 
+                }
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('liveStatus').innerText = "Status: Idle";
+                document.getElementById('liveStatus').style.color = "#666";
+            }, 500);
+        }
+    </script>
+</body>
+</html>
