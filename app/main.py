@@ -1,8 +1,13 @@
 from fastapi import FastAPI
 from app.db import init_db
 from app.routers import upload, ui, history, live
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI(title="Transcription System")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # Create tables on startup
 @app.on_event("startup")

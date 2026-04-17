@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 from app.db import get_session
-from app.models import Transcription
+from app.models.Transcriptions import Transcription
 
 router = APIRouter(prefix="/api", tags=["History"])
 

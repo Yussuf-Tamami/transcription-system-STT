@@ -5,8 +5,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks
 from sqlmodel import Session
 
 from ..db import get_session, engine
-from ..models import Transcription
-from ..transcribe import transcribe_audio
+from ..models.Transcriptions import Transcription
+from ..transcribe import transcribe_with_whisper
 from ..config import settings
 
 router = APIRouter(prefix="/api", tags=["Transcription"])
@@ -17,7 +17,7 @@ def background_processing(transcription_id: int, file_path: str):
         try:
             db_entry = session.get(Transcription, transcription_id)
             if db_entry:
-                db_entry.transcription_text = transcribe_audio(file_path)
+                db_entry.transcription_text = transcribe_with_whisper(file_path)
                 db_entry.status = "done"
                 session.add(db_entry)
                 session.commit()
@@ -51,6 +51,17 @@ async def upload_audio(
     session.commit()
     session.refresh(db_entry)
 
+    # Start background task for transcription (background thread so it doesn't block the response)
     background_tasks.add_task(background_processing, db_entry.id, str(file_path))
     
     return {"id": db_entry.id, "status": "processing"}
+
+@router.get("/status/{transcription_id}")
+async def get_transcription_status(transcription_id: int, session: Session = Depends(get_session)):
+    db_entry = session.get(Transcription, transcription_id)
+    if not db_entry:
+        return {"error": "Not found"}
+    return {
+        "status": db_entry.status,
+        "text": db_entry.transcription_text if db_entry.status == "done" else None
+    }
