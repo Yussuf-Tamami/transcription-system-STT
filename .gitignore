@@ -1,9 +1,10 @@
-.env
-.venv
-uploads/
-model/
-*.db
-*.pyc
+/models/
+.venv/
+/storage/
 __pycache__/
 app/__pycache__/
 app/routers/__pycache__/
+/TTS-Service/models/
+/TTS-Service/storage/
+/STT-Service/models/
+/STT-Service/storage/

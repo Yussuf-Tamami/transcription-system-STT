@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # 1. The Gateway & UI (Replaces Apache)
+  frontend:
+    build: ./frontend
+    container_name: frontend_gateway
+    ports:
+      - "8080:80"
+    volumes:
+    # LIVE TUNNELS: Auto-updates HTML/JS and Nginx Config instantly on save
+      - ./frontend/public:/usr/share/nginx/html
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf
+      # Nginx needs access to the storage volume to serve the .wav files to the audio player
+      - ./storage:/app/storage:ro
+    depends_on:
+      - stt-service
+      - tts-service
+
+  # 2. STT Backend
+  stt-service:
+    build: ./STT-Service
+    container_name: stt_worker
+    volumes:
+    # LIVE TUNNEL: Auto-updates Python code instantly on save
+      - ./STT-Service:/app
+      - ./models:/app/models
+      - ./storage:/app/storage
+    ports:
+      - "8001:8000"
+    depends_on:
+      - db  # Waits for the database to start first
+
+  # 3. TTS Backend
+  tts-service:
+    build: ./TTS-Service
+    container_name: tts_worker
+    volumes:
+    # LIVE TUNNEL: Auto-updates Python code instantly on save
+      - ./TTS-Service:/app
+      - ./models:/app/models
+      - ./storage:/app/storage
+    ports:
+      - "8002:8000"
+
+  # 4. Database
+  
+  db:
+    image: mysql:8.0
+    container_name: mysql_database
+    restart: always
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_DATABASE=transcriptions
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: pma
+    restart: always
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=root
+      - PMA_PASSWORD= 
+    ports:
+      - "8090:80"
+    depends_on:
+      - db
+
+# Declare the named volume for MySQL data
+volumes:
+  db_data:

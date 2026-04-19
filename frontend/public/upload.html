@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload files for transcription</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">HOME</a>
+        <a href="history.html">HISTORY</a>
+    </nav>
+
+    <div class="container">
+        <div id="statusTag" class="status-pill" style="display: none;"></div>
+        <h2>📁 Whisper Transcription</h2>
+        <p style="color: #666;">Upload audio or video for batch processing.</p>
+
+        <div style="border: 2px dashed #ccc; padding: 30px; border-radius: 15px; text-align: center;">
+            <input type="file" id="fileInput" accept="audio/*,video/*" style="width: 100%; margin-bottom: 20px;">
+            <button id="mainBtn" onclick="handleWorkflow()" class="btn btn-primary">
+                Run AI Transcription
+            </button>
+            <div id="progressLine" class="loader-line"></div>
+        </div>
+
+        <div id="resultBox" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; border: 1px solid #ddd;">
+            Waiting for a file...
+        </div>
+    </div>
+
+    <script src="js/stt/stt_upload.js"></script>
+</body>
+</html>

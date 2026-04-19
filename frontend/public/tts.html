@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>H-TECH - Text to Speech</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html">HOME</a>
+        <a href="history.html">HISTORY</a>
+    </nav>
+
+    <div class="container">
+        <h2>🔊 Text to Speech</h2>
+        <p style="color: #666;">Convert text to high-quality offline speech.</p>
+        
+        <textarea id="ttsInput" placeholder="Enter the text you want to synthesize..."></textarea>
+        
+        <button onclick="generateSpeech()" id="genBtn" class="btn btn-primary">
+            Generate Audio
+        </button>
+        
+        <div id="status" style="margin-top: 15px; color: var(--primary); font-weight: bold;"></div>
+        
+        <audio id="audioPlayer" controls style="width: 100%; margin-top: 20px; display: none;"></audio>
+    </div>
+
+    <script src="js/tts/tts_logic.js"></script>
+</body>
+</html>
