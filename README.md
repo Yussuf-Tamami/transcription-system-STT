@@ -1,59 +1,90 @@
-# 🎙️ Speech-to-Text Transcription System
+# 🎙️ Transcription system (Speech-To-Text & Text-To-Speech)
 
-A locally-hosted transcription platform that combines the accuracy of Transformer-based models with the speed of streaming engines. This system is designed to handle both asynchronous file uploads and real-time live microphone streaming.
-
----
-
-## 🌟 Key Features
-
-- **Hybrid AI Engine:**
-    - **High Accuracy:** Uses **Faster-Whisper** for uploaded audio files to ensure near-human precision.
-    - **Real-Time Speed:** Uses **Vosk** for live microphone streaming to provide instant text feedback.
-- **Asynchronous Processing:** Implements multithreading and background tasks to ensure the UI remains responsive during heavy AI computations.
-- **Smart Disk Buffering:** Utilizes a disk-based streaming approach for live recordings to maintain file integrity and prevent decoding errors.
-- **Permanent History:** Automatically stores all transcription metadata and results in a **MySQL** database.
-- **Format Agnostic:** Built-in audio normalization pipeline that supports various formats including `.mp3`, `.m4a`, `.wav`, and `.webm`.
+A locally-hosted transcription platform that combines the accuracy of Transformer-based AI models with the speed of streaming engines. This system is designed to handle both real-time speech-to-text (STT) & file-based transcription, and neural text-to-speech (TTS) synthesis.
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Technical Stack
 
-- **Backend:** [FastAPI](https://fastapi.tiangolo.com/) (Python)
-- **Database:** [MySQL](https://www.mysql.com/) / [SQLModel](https://sqlmodel.tiangolo.com/)
-- **AI Models:**
-    - `faster-whisper` (Transformer architecture) "based on Neural Networks"
-    - `vosk` (HMM-based streaming engine) "based on statistical modeling HMM-GMM"
-- **Audio Engineering:** [Pydub](http://pydub.com/) & [FFmpeg](https://ffmpeg.org/)
-- **Frontend:** HTML5, CSS3, JavaScript (WebSockets & MediaRecorder API)
-
----
-
-## 🏗️ System Architecture
-
-### 1. File Upload Service
-When a file is uploaded, the system:
-1. Responds immediately to the user while initiating a **Background Task**.
-2. Standardizes the audio to 16kHz Mono PCM.
-3. Processes the audio through **Faster-Whisper** in a worker thread.
-4. Updates the database status once completed.
-
-### 2. Live Stream Service
-When a live stream starts, the system:
-1. Establishes a full-duplex **WebSocket** connection.
-2. Streams binary audio chunks into a **Persistent Disk Buffer**.
-3. Provides real-time interim results to the UI.
-4. Finalizes the transcription and commits to the database upon disconnection.
+| Component     | Technology                    | Role                                                      |
+| ------------- | ----------------------------- | --------------------------------------------------------- |
+| Gateway       | Nginx                         | Reverse Proxy, WebSocket handling, & Static Asset serving |
+| STT Engine    | FastAPI, Faster-Whisper, Vosk | Audio processing (Batch & Real-time)                      |
+| TTS Engine    | FastAPI, Kokoro-ONNX          | Neural Speech Synthesis                                   |
+| Database      | MySQL 8.0                     | Metadata and transcription history storage                |
+| Orchestration | Docker & Docker Compose       | Containerization and networking                           |
+| Management    | phpMyAdmin                    | Visual database administration                            |
 
 ---
 
-## 📁 Project Structure
+## 🏗️ Architecture Overview
 
-- `app/main.py`: Main entry point and server configuration.
-- `app/transcribe.py`: The core engine layer (Whisper/Vosk integration).
-- `app/routers/`: Modular route handlers for uploads, live streaming, and history.
-- `app/models.py`: SQLModel definitions for the database schema.
-- `templates/`: Modern card-based user interface.
+The system follows a **Microservices Architecture**. Instead of one monolithic application, it is split into specialized services that communicate over an internal Docker network.
+
+The **Nginx Gateway** acts as the single entry point (Port 8080), handling routing, protecting backend services, and directing traffic based on URL paths.
 
 ---
 
-*This system is optimized for local execution, ensuring 100% data privacy and zero API costs.*
+## 🚀 Getting Started
+
+### Prerequisites
+
+* Docker and Docker Compose installed
+* At least **8GB of RAM** (required to load AI models)
+
+---
+
+### Installation & Deployment
+
+#### 1. Clone the Repository
+
+```bash
+git clone <https://github.com/Yussuf-Tamami/transcription-system_STT-TTS>
+cd transcription-system
+```
+
+#### 2. Spin up the Environment
+
+```bash
+docker-compose up -d
+```
+
+> **Note:** On the first run, the system will download AI models into the `./models` folder. This may take a few minutes depending on your internet speed.
+
+#### 3. Verify the Services
+
+```bash
+docker ps
+```
+
+Ensure the following containers are running:
+
+* `frontend_gateway`
+* `stt_worker`
+* `tts_worker`
+* `mysql_database`
+
+---
+
+## 🌐 How to Access the Platform
+
+Once the containers are running:
+
+* **Main UI:** http://localhost:8080
+* **Database Admin (phpMyAdmin):** http://localhost:8090
+* **STT API Docs (Swagger):** http://localhost:8001/docs
+* **TTS API Docs (Swagger):** http://localhost:8002/docs
+
+---
+
+## 📁 Repository Structure
+
+```plaintext
+.
+├── frontend/             # Nginx config & HTML/JS/CSS assets
+├── STT-Service/          # Python FastAPI service for Speech-to-Text
+├── TTS-Service/          # Python FastAPI service for Text-to-Speech
+├── storage/              # Shared volume for audio uploads and outputs
+├── models/               # Shared volume for AI model weights
+└── docker-compose.yml    # System orchestration file
+```
