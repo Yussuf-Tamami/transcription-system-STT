@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+kokoro-onnx
+soundfile
+numpy
+python-multipart
+pydantic-settings
+pydantic
