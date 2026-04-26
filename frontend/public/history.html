@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>H-TECH - History</title>
+    <title>Transcriptions History</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -11,19 +11,25 @@
         <a href="history.html">HISTORY</a>
     </nav>
 
-    <div class="container">
-        <h2>History Logs</h2>
-        <table>
+   <div class="container">
+        <h2 style="text-align: center; margin-bottom: 20px;">Processing History</h2>
+        
+        <div style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 10px;">
+            <button onclick="loadHistory('stt')" id="sttBtn" class="btn btn-primary">🎤 STT & Diarization</button>
+            <button onclick="loadHistory('tts')" id="ttsBtn" class="btn btn-outline-primary">🔊 Text-to-Speech</button>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; text-align: left;">
             <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Result Preview</th>
-                    <th>Created At</th>
+                <tr id="tableHeaders" style="border-bottom: 2px solid #ddd; background: #fafafa;">
+                    <th style="padding: 10px;">ID</th>
+                    <th style="padding: 10px;">Source</th>
+                    <th style="padding: 10px;">Preview</th>
+                    <th style="padding: 10px;">Date</th>
+                    <th style="padding: 10px; text-align: center;">Audio</th>
                 </tr>
             </thead>
-            <tbody id="historyTable">
-                <tr><td colspan="3" style="text-align:center;">Loading logs...</td></tr>
-            </tbody>
+            <tbody id="historyTable"></tbody>
         </table>
     </div>
 

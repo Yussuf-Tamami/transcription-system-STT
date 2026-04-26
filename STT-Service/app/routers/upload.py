@@ -5,28 +5,49 @@ from fastapi import APIRouter, UploadFile, File, Depends, BackgroundTasks
 from sqlmodel import Session
 
 from ..db import get_session, engine
-from ..models.Transcriptions import Transcription
-from ..transcribe import transcribe_with_whisper
+from ..models.Uploads import Upload
+from ..models.TranscriptionChunk import TranscriptionChunk
+from ..transcribe import process_upload_hybrid
 from ..config import settings
 
 router = APIRouter()
 
-def background_processing(transcription_id: int, file_path: str):
-    """Update database record after transcription."""
+def background_processing(upload_id: int, file_path: str):
+    """Handles the heavy AI processing and multi-table saving logic."""
     with Session(engine) as session:
         try:
-            db_entry = session.get(Transcription, transcription_id)
+            db_entry = session.get(Upload, upload_id)
             if db_entry:
-                db_entry.transcription_text = transcribe_with_whisper(file_path)
-                db_entry.status = "done"
+                speaker_count, chunks, full_text = process_upload_hybrid(file_path)
+                
+                db_entry.speaker_count = speaker_count
+                db_entry.status = "completed"
+
+                if speaker_count <= 1:
+                    db_entry.full_text = full_text
+                else:
+                    # Write the glued chunks into the child table
+                    for chunk in chunks:
+                        db_chunk = TranscriptionChunk(
+                            upload_id=db_entry.id,
+                            speaker_label=chunk["speaker"],
+                            start_time=chunk["start"],
+                            end_time=chunk["end"],
+                            text=chunk["text"]
+                        )
+                        session.add(db_chunk)
+                        
                 session.add(db_entry)
                 session.commit()
         except Exception as e:
-            # If it fails, at least mark it as "error" in the DB so you know!
-            db_entry.status = "error"
-            db_entry.transcription_text = f"Crashed: {str(e)}"
-            session.commit()
-
+            # Roll back the failed transaction to prevent database locking
+            session.rollback() 
+            
+            if db_entry:
+                db_entry.status = "failed"
+                db_entry.full_text = f"Crashed: {str(e)}"
+                session.add(db_entry)
+                session.commit()
 
 @router.post("/api/stt/upload")
 async def upload_audio(
@@ -34,34 +55,42 @@ async def upload_audio(
     file: UploadFile = File(...),
     session: Session = Depends(get_session)
 ):
-    unique_name = f"{uuid.uuid4()}{Path(file.filename).suffix}"
+    # 1. Force the .wav extension because frontend normalizes everything to WAV
+    unique_name = f"upload_{uuid.uuid4().hex[:8]}.wav"
+    
     file_path = settings.UPLOAD_DIR / unique_name
+    
+    # Create directory if it doesn't exist inside the Docker container
+    file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Save file
+    # 2. Save the file physically to the disk
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Register record
-    db_entry = Transcription(
-        filename=file.filename,
-        filepath=str(file_path),
-        status="processing"
+    
+    db_entry = Upload(
+        source_type="file",
+        status="processing",
+        file_path=str(file_path) 
     )
+    
     session.add(db_entry)
     session.commit()
     session.refresh(db_entry)
 
-    # Start background task for transcription (background thread so it doesn't block the response)
+    # 4. Send the saved file path to the background worker
     background_tasks.add_task(background_processing, db_entry.id, str(file_path))
     
     return {"id": db_entry.id, "status": "processing"}
 
-@router.get("/api/stt/status/{transcription_id}")
-async def get_transcription_status(transcription_id: int, session: Session = Depends(get_session)):
-    db_entry = session.get(Transcription, transcription_id)
+@router.get("/api/stt/status/{upload_id}")
+async def get_transcription_status(upload_id: int, session: Session = Depends(get_session)):
+    db_entry = session.get(Upload, upload_id)
     if not db_entry:
         return {"error": "Not found"}
     return {
         "status": db_entry.status,
-        "text": db_entry.transcription_text if db_entry.status == "done" else None
+        "speaker_count": db_entry.speaker_count,
+        "full_text": db_entry.full_text,
+        "chunks": db_entry.chunks # SQLModel automatically fetches the related rows!
     }

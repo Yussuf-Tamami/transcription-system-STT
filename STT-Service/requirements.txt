@@ -1,18 +1,23 @@
-sqlmodel
-fastapi
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Core AI (CPU Only)
+torch==2.2.1
+torchaudio==2.2.1
+speechbrain==1.0.0
+scikit-learn==1.4.1.post1
+
+# Transcription (Updated versions for binary support)
+faster-whisper==1.1.0
+vosk==0.3.45
+
+# Backend Essentials
+fastapi==0.110.0
 uvicorn[standard]
-jinja2
-python-multipart
-aiofiles
-pocketsphinx
+sqlmodel==0.0.16
+python-multipart==0.0.9
+pydub==0.25.1
 pymysql
-faster-whisper
-pydantic           
-pydantic-settings  
-pydub              
-python-dotenv      
-SpeechRecognition  
-sqlmodel          
-static_ffmpeg     
-vosk               
-websockets     
+pydantic-settings
+static_ffmpeg
+huggingface_hub==0.21.4
+soundfile

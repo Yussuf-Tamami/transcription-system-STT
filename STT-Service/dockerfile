@@ -1,11 +1,19 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# Install only the runtime tools (no compilers, no headers)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip and install. Without gcc/build-essential, this will 
+# either find a pre-built binary (fast) or fail (telling us we need a different version).
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 COPY . .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # 1. The Gateway & UI (Replaces Apache)
+  # 1. The Gateway & UI 
   frontend:
     build: ./frontend
     container_name: frontend_gateway
@@ -30,7 +28,9 @@ services:
       - "8001:8000"
     depends_on:
       - db  # Waits for the database to start first
-
+    environment:
+      - HF_HOME=/tmp/huggingface
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
   # 3. TTS Backend
   tts-service:
     build: ./TTS-Service
@@ -42,6 +42,8 @@ services:
       - ./storage:/app/storage
     ports:
       - "8002:8000"
+    env_file:
+      - .env
 
   # 4. Database
   

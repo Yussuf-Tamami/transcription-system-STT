@@ -4,7 +4,7 @@ from app.routers import upload, history, live
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from app.models import Transcriptions
+from app.models import TranscriptionChunk, Uploads
 
 
 app = FastAPI(title="STT Service")

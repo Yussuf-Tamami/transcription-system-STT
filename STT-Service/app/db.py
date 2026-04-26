@@ -1,5 +1,7 @@
 from sqlmodel import SQLModel, create_engine, Session
 from .config import settings
+from app.models.Uploads import Upload
+from app.models.TranscriptionChunk import TranscriptionChunk
 
 # For SQLite, we need check_same_thread=False
 connect_args = {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}

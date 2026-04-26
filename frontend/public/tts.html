@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>H-TECH - Text to Speech</title>
+    <title>Text to Speech</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -12,19 +12,30 @@
     </nav>
 
     <div class="container">
-        <h2>🔊 Text to Speech</h2>
-        <p style="color: #666;">Convert text to high-quality offline speech.</p>
-        
-        <textarea id="ttsInput" placeholder="Enter the text you want to synthesize..."></textarea>
-        
-        <button onclick="generateSpeech()" id="genBtn" class="btn btn-primary">
-            Generate Audio
-        </button>
-        
-        <div id="status" style="margin-top: 15px; color: var(--primary); font-weight: bold;"></div>
-        
-        <audio id="audioPlayer" controls style="width: 100%; margin-top: 20px; display: none;"></audio>
+    <h2>🔊 Text to Speech</h2>
+    <p style="color: #666;">Convert text to high-quality offline speech.</p>
+    
+    <textarea id="ttsInput" placeholder="Enter the text you want to synthesize..."></textarea>
+    
+    <div class="voice-selection" style="margin-bottom: 15px; text-align: left;">
+        <label for="voiceSelect" style="display: block; margin-bottom: 5px; font-weight: bold;">Voice Personality:</label>
+        <select id="voiceSelect" class="btn" style="width: 100%; background: white; border: 1px solid #ccc; color: #333;">
+            <option value="af_bella">Bella (Female - Soft)</option>
+            <option value="am_fenrir">Fenrir (Male - Deep)</option>
+            <option value="af_nicole">Nicole (Female - Clear)</option>
+            <option value="am_adam">Adam (Male - Standard)</option>
+            <option value="af_sky">Sky (Female - Youthful)</option>
+        </select>
     </div>
+    
+    <button onclick="generateSpeech()" id="genBtn" class="btn btn-primary">
+        Generate Audio
+    </button>
+    
+    <div id="status" style="margin-top: 15px; color: var(--primary); font-weight: bold;"></div>
+    
+    <audio id="audioPlayer" controls style="width: 100%; margin-top: 20px; display: none;"></audio>
+</div>
 
     <script src="js/tts/tts_logic.js"></script>
 </body>

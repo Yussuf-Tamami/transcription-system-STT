@@ -1,97 +1,157 @@
-import os
 import io
 import json
 import uuid
+import wave
 
-import static_ffmpeg  # Ensure FFmpeg is available for pydub
+import static_ffmpeg  
 static_ffmpeg.add_paths()
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlmodel import Session
 from pydub import AudioSegment
 
-from ..db import engine
-from ..models.Transcriptions import Transcription
-from ..transcribe import _vosk_model, KaldiRecognizer
+from ..db import get_session
+from ..models.Uploads import Upload
+from ..models.TranscriptionChunk import TranscriptionChunk
+from ..transcribe import _vosk_model, spk_model, KaldiRecognizer
+from ..clustering import cluster_fingerprints
 from ..config import settings
 
 router = APIRouter(tags=["Live"])
 
 @router.websocket("/ws/live")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, session: Session = Depends(get_session)):
     await websocket.accept()
+    print("--- 🟢 Streaming Connection Started ---")
+
+    # Attach the Speaker Model to the Live Recognizer
+    rec = KaldiRecognizer(_vosk_model, 16000)
+    rec.SetSpkModel(spk_model) 
+
+    # Create a database record for this live session
+    live_upload = Upload(source_type="live_stream", status="processing")
+    session.add(live_upload)
+    session.commit()
+    session.refresh(live_upload)
+
+    extracted_data = []
+    fingerprints = []
+    full_live_text = ""
     
-    # byte array in ram to hold incoming audio data (.webms or .wav) from the browser
-    audio_buffer = bytearray()
-    print("--- 🟢 Live Connection Started (RAM Buffer) ---")
+    # Create an empty bytearray to catch the audio stream for saving
+    live_audio_buffer = bytearray()
 
     try:
         while True:
             message = await websocket.receive()
-            
-            if "text" in message and message["text"] == "END_OF_STREAM":
+
+            # --- CRITICAL FIX 1: The check I forgot in the last file! ---
+            # If we don't catch this, Starlette loops and crashes with the "Cannot call receive" error.
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect(message.get("code", 1000))
+
+            # --- CRITICAL FIX 2: Safely check for the end signal ---
+            if message.get("text") == "END_OF_STREAM":
                 break
-            
+
+            # Process audio chunks
             if "bytes" in message:
-                # keeps adding incoming audio data to the RAM buffer
-                audio_buffer.extend(message["bytes"])
+                audio_bytes = message["bytes"]
+                live_audio_buffer.extend(audio_bytes) 
 
-               
-                if len(audio_buffer) > 80000: 
-                    try:
-                        #sends the current buffer content to Vosk for partial transcription results
-                        current_bytes = bytes(audio_buffer)
-                        partial_text = await run_in_threadpool(get_partial_transcription, current_bytes)
-                        
-                        if partial_text:
-                            await websocket.send_json({"status": "partial", "text": partial_text})
-                    except Exception as e:
-                        
-                        pass
+                if rec.AcceptWaveform(audio_bytes):
+                    result = json.loads(rec.Result())
+                    text = result.get("text", "")
+                    spk = result.get("spk") 
+                    
+                    if text:
+                        full_live_text += text + " "
+                        start_time = result.get("result", [{}])[0].get("start", 0.0)
+                        end_time = result.get("result", [{}])[-1].get("end", 0.0)
 
-        # --- STOPPED: Finalize ---
-        print("--- 💾 Stream Ended. Finalizing in RAM ---")
+                        if spk:
+                            extracted_data.append({"start": start_time, "end": end_time, "text": text})
+                            fingerprints.append(spk)
+
+                        await websocket.send_json({"status": "segment", "text": text})
+                else:
+                    partial = json.loads(rec.PartialResult()).get("partial", "")
+                    if partial:
+                        await websocket.send_json({"status": "partial", "text": partial})
+
+        # --- STREAM ENDED (Cleanly triggered by END_OF_STREAM) ---
+        await websocket.send_json({"status": "done", "text": "Processing speakers..."})
         
-        final_bytes = bytes(audio_buffer)
-        final_text = await run_in_threadpool(get_final_transcription, final_bytes)
-
-        # storing the final audio and transcription in the database, but only if we got some text back (and we have audio data)
-        if final_text and len(final_bytes) > 0:
-            filename = f"live_{uuid.uuid4().hex}.wav"
-            final_path = settings.UPLOAD_DIR / filename
-            
+        # 1. Clustering
+        speaker_count, chunks, final_text = cluster_fingerprints(extracted_data, fingerprints, threshold=0.85)
         
-            audio_stream = io.BytesIO(final_bytes)
-            audio = AudioSegment.from_file(audio_stream)
-            audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-            audio.export(final_path, format="wav") 
-
-            # Create DB entry for this live transcription
-            with Session(engine) as session:
-                db_entry = Transcription(
-                    filename=f"Live Session {uuid.uuid4().hex[:4]}",
-                    filepath=str(final_path),
-                    status="done",
-                    transcription_text=final_text
+        # 2. Save WAV file
+        unique_name = f"live_{live_upload.id}_{uuid.uuid4().hex[:8]}.wav"
+        save_path = settings.UPLOAD_DIR / unique_name
+        save_path.parent.mkdir(parents=True, exist_ok=True) 
+        
+        if len(live_audio_buffer) > 0:
+            with wave.open(str(save_path), 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
+                wf.writeframes(bytes(live_audio_buffer))
+            live_upload.file_path = str(save_path) 
+        
+        # 3. Update DB
+        live_upload.status = "completed"
+        live_upload.speaker_count = speaker_count
+        
+        if speaker_count <= 1:
+            live_upload.full_text = final_text or full_live_text.strip()
+        else:
+            for chunk in chunks:
+                db_chunk = TranscriptionChunk(
+                    upload_id=live_upload.id,
+                    speaker_label=chunk["speaker"],
+                    start_time=chunk["start"],
+                    end_time=chunk["end"],
+                    text=chunk["text"]
                 )
-                session.add(db_entry)
-                session.commit()
-                session.refresh(db_entry)
+                session.add(db_chunk)
 
-            # Send final transcription back to client
-            await websocket.send_json({"status": "done", "text": final_text})
+        session.add(live_upload)
+        session.commit()
+
+        # 4. Send Final Chunks back to UI
+        await websocket.send_json({
+            "status": "completed",
+            "speaker_count": speaker_count,
+            "text": final_text or full_live_text.strip(),
+            "chunks": chunks
+        })
+
+        await websocket.close()
+        print("--- ⚪ Connection Closed Gracefully ---")
 
     except WebSocketDisconnect:
-        print("--- ⚪ Connection Closed by Client ---")
-    finally:
-        # free up RAM buffer
-        del audio_buffer
+        live_upload.status = "failed"
+        live_upload.full_text = "Stream disconnected unexpectedly."
+        session.add(live_upload)
+        session.commit()
+        print("--- ⚪ Connection Closed (Disconnected by client) ---")
+        
+    except Exception as e:
+        session.rollback()
+        live_upload.status = "failed"
+        live_upload.full_text = f"Internal Server Error: {str(e)}"
+        session.add(live_upload)
+        session.commit()
+        print(f"--- ❌ Stream Crashed: {str(e)} ---")
+        try:
+            await websocket.close()
+        except:
+            pass
 
 # --- Helper Functions (RAM Processing) ---
 
 def get_partial_transcription(audio_bytes: bytes):
-    """ gets partial transcription results from Vosk using audio data directly from RAM (without saving to disk) """
+    """ gets partial transcription results from Vosk using audio data directly from RAM """
     try:
         audio_stream = io.BytesIO(audio_bytes)
         audio = AudioSegment.from_file(audio_stream)
@@ -104,7 +164,7 @@ def get_partial_transcription(audio_bytes: bytes):
         return ""
 
 def get_final_transcription(audio_bytes: bytes):
-    """ gets final transcription results from Vosk using audio data directly from RAM (without saving to disk) """
+    """ gets final transcription results from Vosk using audio data directly from RAM """
     try:
         audio_stream = io.BytesIO(audio_bytes)
         audio = AudioSegment.from_file(audio_stream)
