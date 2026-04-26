@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from kokoro_onnx import Kokoro
 from app.routers import synthesize
+from app.models.TTSHistory import TTSHistory
+from .db import init_db
+from app.routers import history
 
 app = FastAPI(title="TTS Service")
 
@@ -28,7 +31,13 @@ kokoro_engine = Kokoro(
 app.state.kokoro = kokoro_engine
 
 app.include_router(synthesize.router)
+app.include_router(history.router)
 
 @app.get("/")
 async def root():
     return {"status": "TTS Service Online"}
+
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()

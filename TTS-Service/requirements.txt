@@ -6,3 +6,5 @@ numpy
 python-multipart
 pydantic-settings
 pydantic
+sqlmodel
+pymysql

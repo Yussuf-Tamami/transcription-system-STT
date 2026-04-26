@@ -1,0 +1,8 @@
+# Ignore heavy models and temporary AI folders
+models/
+pretrained_models/
+__pycache__/
+*.wav
+*.flac
+.git
+.venv
